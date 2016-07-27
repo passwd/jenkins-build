@@ -1,0 +1,89 @@
+#!/bin/bash
+
+function log_line {
+  DATE=`date +%H:%M:%S`
+  echo "[$DATE] $1"
+}
+
+if [ ! -f $HOME/.jenkins-config ]; then
+  log_line "Please create a config file: $HOME/.jenkins-config"
+fi
+
+. $HOME/.jenkins-config
+log_line "Jenkins config file loaded"
+
+http_protocol='http'
+if [[ "$JENKINS_SSL" != false ]]; then
+  http_protocol='https'
+fi
+
+base_url="$http_protocol://$JENKINS_HOSTNAME"
+auth_url="$http_protocol://$JENKINS_USERNAME:$JENKINS_APIKEY@$JENKINS_HOSTNAME"
+if [[ "$JENKINS_PORT" != false ]]; then
+  base_url="$base_url:$JENKINS_PORT"
+  auth_url="$auth_url:$JENKINS_PORT"
+
+fi
+
+build_name=false
+while getopts b: opts; do
+   case ${opts} in
+      b) build_name=${OPTARG} ;;
+   esac
+done
+
+if [[ "$build_name" == false ]]; then
+    log_line 'Please enter a build name using "-b buildName"'
+    exit;
+fi
+
+job_name="$JENKINS_BUILDPREFIX$build_name"
+
+log_line "Job name $job_name"
+
+GREP_RETURN_CODE=1
+
+log_line "Starting build of $job_name on $base_url..."
+# Start the build
+curl -d "token=$JENKINS_BUILDTOKEN" -d "job=$job_name" "$base_url/buildByToken/build"
+
+wait_start=$(date +%s)
+count=0
+log_line "Waiting for build to start..."
+
+while [ $GREP_RETURN_CODE -gt 0 ]
+do
+    if [[ count -gt 30 ]]; then
+        log_line 'Error: Timed out waiting for this build to start'
+        exit;
+    fi
+
+    # Grep will return 0 while the build is running:
+    curl --silent $auth_url/job/$job_name/lastBuild/api/json | grep result\":null > /dev/null
+    GREP_RETURN_CODE=$?
+    sleep 1
+
+    let count=count+1
+done
+
+wait_end=$(date +%s)
+runtime=$(((wait_end - wait_start)))
+log_line "Build request took "$runtime"s to start"
+
+build_start=$(date +%s)
+log_line "Waiting for build to finish..."
+count=0
+while [ $GREP_RETURN_CODE -eq 0 ]
+do
+    # Grep will return 0 while the build is running:
+    curl $auth_url/job/$job_name/lastBuild/consoleText
+
+    curl --silent $auth_url/job/$job_name/lastBuild/api/json | grep result\":null > /dev/null
+    GREP_RETURN_CODE=$?
+
+    let count=count+1
+done
+
+log_line "Build complete!"
+
+exit
