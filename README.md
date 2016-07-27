@@ -24,4 +24,7 @@ To finish the install just copy the script to your local bin.
 
 ## Usage
 
-    $ jenkins -b myapp-production
+    -v Verbose output, shows the jenkins console output
+    -b Jenkins project ID
+
+    $ jenkins -v -b myapp-production
