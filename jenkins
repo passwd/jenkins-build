@@ -25,10 +25,12 @@ if [[ "$JENKINS_PORT" != false ]]; then
 
 fi
 
+verbose=false
 build_name=false
-while getopts b: opts; do
+while getopts vb: opts; do
    case ${opts} in
       b) build_name=${OPTARG} ;;
+      v) verbose=${OPTARG} ;;
    esac
 done
 
@@ -37,14 +39,9 @@ if [[ "$build_name" == false ]]; then
     exit;
 fi
 
-job_name="$JENKINS_BUILDPREFIX$build_name"
-
-log_line "Job name $job_name"
-
 GREP_RETURN_CODE=1
-
+job_name="$JENKINS_BUILDPREFIX$build_name"
 log_line "Starting build of $job_name on $base_url..."
-# Start the build
 curl -d "token=$JENKINS_BUILDTOKEN" -d "job=$job_name" "$base_url/buildByToken/build"
 
 wait_start=$(date +%s)
@@ -58,7 +55,6 @@ do
         exit;
     fi
 
-    # Grep will return 0 while the build is running:
     curl --silent $auth_url/job/$job_name/lastBuild/api/json | grep result\":null > /dev/null
     GREP_RETURN_CODE=$?
     sleep 1
@@ -75,8 +71,9 @@ log_line "Waiting for build to finish..."
 count=0
 while [ $GREP_RETURN_CODE -eq 0 ]
 do
-    # Grep will return 0 while the build is running:
-    curl $auth_url/job/$job_name/lastBuild/consoleText
+    if [[ "$verbose" != false ]]; then
+      curl $auth_url/job/$job_name/lastBuild/consoleText
+    fi
 
     curl --silent $auth_url/job/$job_name/lastBuild/api/json | grep result\":null > /dev/null
     GREP_RETURN_CODE=$?
@@ -85,5 +82,9 @@ do
 done
 
 log_line "Build complete!"
+
+build_end=$(date +%s)
+runtime=$(((build_end - build_start)))
+log_line "Build request took "$runtime"s to complete"
 
 exit
