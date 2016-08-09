@@ -36,7 +36,7 @@ done
 
 if [[ "$build_name" == false ]]; then
     log_line 'Please enter a build name using "-b buildName"'
-    exit;
+    exit
 fi
 
 GREP_RETURN_CODE=1
@@ -52,7 +52,7 @@ while [ $GREP_RETURN_CODE -gt 0 ]
 do
     if [[ count -gt 30 ]]; then
         log_line 'Error: Timed out waiting for this build to start'
-        exit;
+        exit
     fi
 
     curl --silent $auth_url/job/$job_name/lastBuild/api/json | grep result\":null > /dev/null
@@ -69,10 +69,14 @@ log_line "Build request took "$runtime"s to start"
 build_start=$(date +%s)
 log_line "Waiting for build to finish..."
 count=0
+chunk_position=0
 while [ $GREP_RETURN_CODE -eq 0 ]
 do
     if [[ "$verbose" != false ]]; then
-      curl $auth_url/job/$job_name/lastBuild/consoleText
+        response="$(curl -sL -X GET -d "start=$chunk_position" $auth_url/job/$job_name/lastBuild/logText/progressiveText)"
+        echo "$response"
+        last_pos=${#response}
+        let chunk_position=$chunk_position+$last_pos
     fi
 
     curl --silent $auth_url/job/$job_name/lastBuild/api/json | grep result\":null > /dev/null
